@@ -153,6 +153,7 @@ typedef enum ptm_bfd_session_flags {
 	BFD_SESS_FLAG_SEND_EVT_IGNORE = 1 << 6, /* ignore send event when timer
 						 * expires */
 	BFD_SESS_FLAG_SHUTDOWN = 1 << 7,	/* disable BGP peer function */
+        BFD_SESS_FLAG_TRACK_SLA = 1 << 8,   /* Calculate SLA parameters */
 } bfd_session_flags;
 
 #define BFD_SET_FLAG(field, flag) (field |= flag)
@@ -177,6 +178,15 @@ typedef struct ptm_bfd_session_stats {
 	uint64_t rx_echo_pkt;
 	uint64_t tx_echo_pkt;
 } bfd_session_stats_t;
+
+typedef struct ptm_bfd_session_sla {
+    uint32_t lattency;
+    uint32_t jitter;
+    uint32_t old_lat;
+    uint32_t pkts_lost;
+    float pkt_loss;
+} bfd_session_sla_t;
+#define PKTS_TO_CONSIDER_FOR_PKT_LOSS 100
 
 typedef struct {
 	uint32_t seqid;
@@ -267,6 +277,10 @@ typedef struct ptm_bfd_session {
 	bfd_timers_t remote_timers;
 
 	uint64_t refcount; /* number of pointers referencing this. */
+
+        /* SLA parameters */
+        bfd_session_sla_t sla;
+        struct timeval xmit_tv; /* The time at which the last packet was sent. */
 } bfd_session;
 
 struct peer_label {
@@ -399,6 +413,7 @@ struct bfd_control_socket {
 TAILQ_HEAD(bcslist, bfd_control_socket);
 
 int control_init(const char *path);
+int control_notify_sla(bfd_session *bs);
 int control_notify(bfd_session *bs);
 int control_notify_config(const char *op, bfd_session *bs);
 
@@ -436,6 +451,7 @@ int parse_config(const char *);
 int config_request_add(const char *jsonstr);
 int config_request_del(const char *jsonstr);
 char *config_response(const char *status, const char *error);
+char *config_notify_sla(bfd_session *bs);
 char *config_notify(bfd_session *bs);
 char *config_notify_config(const char *op, bfd_session *bs);
 
@@ -562,4 +578,8 @@ bfd_session *ptm_bfd_sess_find(bfd_pkt_t *cp, char *port_name,
 bfd_session *bfd_find_shop(bfd_shop_key *k);
 bfd_session *bfd_find_mhop(bfd_mhop_key *k);
 
+/*
+ * sla calculations.
+ */
+void ptm_bfd_send_sla_update(bfd_session *bfd, struct timeval *recv_tv);
 #endif /* _BFD_H_ */

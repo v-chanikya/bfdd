@@ -62,6 +62,7 @@ int json_object_add_string(struct json_object *jo, const char *key,
 			   const char *str);
 int json_object_add_bool(struct json_object *jo, const char *key, bool boolean);
 int json_object_add_int(struct json_object *jo, const char *key, int64_t value);
+int json_object_add_float(struct json_object *jo, const char *key, float value);
 int json_object_add_peer(struct json_object *jo, bfd_session *bs);
 
 void pl_free(struct peer_label *pl);
@@ -236,6 +237,10 @@ int parse_peer_config(struct json_object *jo, struct bfd_peer_cfg *bpc)
 			} else {
 				log_debug("\tvrf-name: %s\n", sval);
 			}
+		} else if (strcmp(key, "discriminator") == 0) {
+                        bpc->bpc_has_discr = true;
+                        bpc->bpc_discr = json_object_get_int(jo_val);
+			log_debug("\tdiscriminator: %d\n", bpc->bpc_discr);
 		} else if (strcmp(key, "detect-multiplier") == 0) {
 			bpc->bpc_detectmultiplier =
 				json_object_get_int64(jo_val);
@@ -280,6 +285,10 @@ int parse_peer_config(struct json_object *jo, struct bfd_peer_cfg *bpc)
 			} else {
 				log_debug("\tlabel: %s\n", sval);
 			}
+		} else if (strcmp(key, "track-sla") == 0) {
+			bpc->bpc_track_sla = json_object_get_boolean(jo_val);
+			log_debug("\ttrack-sla: %s\n",
+				  bpc->bpc_track_sla ? "true" : "false");
 		} else {
 			sval = json_object_get_string(jo_val);
 			log_warning("%s:%d invalid configuration: '%s: %s'\n",
@@ -393,6 +402,33 @@ char *config_response(const char *status, const char *error)
 
 		json_object_object_add(resp, "error", jo);
 	}
+
+	/* Generate JSON response. */
+	jsonstr = strdup(
+		json_object_to_json_string_ext(resp, BFDD_JSON_CONV_OPTIONS));
+	json_object_put(resp);
+
+	return jsonstr;
+}
+
+char *config_notify_sla(bfd_session *bs)
+{
+	struct json_object *resp;
+	char *jsonstr;
+
+	resp = json_object_new_object();
+	if (resp == NULL)
+		return NULL;
+
+	json_object_add_string(resp, "op", BCM_NOTIFY_PEER_SLA_UPDATE);
+
+	/* Add status information */
+	json_object_add_int(resp, "id", bs->discrs.my_discr);
+	json_object_add_int(resp, "remote-id", bs->discrs.my_discr);
+
+        json_object_add_int(resp, "latency", bs->sla.lattency);
+        json_object_add_int(resp, "jitter", bs->sla.jitter);
+        json_object_add_float(resp, "pkt_loss", bs->sla.pkt_loss);
 
 	/* Generate JSON response. */
 	jsonstr = strdup(
@@ -556,6 +592,20 @@ int json_object_add_int(struct json_object *jo, const char *key, int64_t value)
 	struct json_object *jon;
 
 	jon = json_object_new_int64(value);
+	if (jon == NULL) {
+		json_object_put(jon);
+		return -1;
+	}
+
+	json_object_object_add(jo, key, jon);
+	return 0;
+}
+
+int json_object_add_float(struct json_object *jo, const char *key, float value)
+{
+	struct json_object *jon;
+
+	jon = json_object_new_double(value);
 	if (jon == NULL) {
 		json_object_put(jon);
 		return -1;

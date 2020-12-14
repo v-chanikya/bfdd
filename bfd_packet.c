@@ -466,9 +466,12 @@ int ptm_bfd_process_echo_pkt(int s)
 	char rx_pkt[BFD_RX_BUF_LEN];
 	bfd_session *bfd;
 	uint32_t my_discr = 0;
+        struct timeval recv_tv;
 
 	pkt_len = recvfrom(s, rx_pkt, BFD_RX_BUF_LEN, MSG_DONTWAIT,
 			   (struct sockaddr *)&sll, &from_len);
+
+        gettimeofday(&recv_tv, NULL);
 	if (pkt_len <= 0) {
 		if (errno != EAGAIN)
 			ERRLOG("Error receiving from BFD Echo socket: %s",
@@ -513,8 +516,11 @@ int ptm_bfd_process_echo_pkt(int s)
 		INFOLOG("BFD echo not active - ignore echo packet");
 		return -1;
 	}
-
+	
 	bfd->stats.rx_echo_pkt++;
+        if (BFD_CHECK_FLAG(bfd->flags, BFD_SESS_FLAG_TRACK_SLA)) {
+            ptm_bfd_send_sla_update(bfd, &recv_tv);
+        }
 
 	/* Compute detect time */
 	bfd->echo_detect_TO = bfd->remote_detect_mult * bfd->echo_xmt_TO;
@@ -796,6 +802,7 @@ void bfd_recv_cb(evutil_socket_t sd, short events __attribute__((unused)),
 {
 	bfd_session *bfd;
 	bfd_pkt_t *cp;
+        struct timeval recv_tv;
 	bool is_mhop, is_vxlan;
 	ssize_t mlen = 0;
 	uint8_t old_state;
@@ -809,6 +816,7 @@ void bfd_recv_cb(evutil_socket_t sd, short events __attribute__((unused)),
 		return;
 	}
 
+        gettimeofday(&recv_tv, NULL);
 	is_mhop = is_vxlan = false;
 	if (sd == bglobal.bg_shop || sd == bglobal.bg_mhop) {
 		is_mhop = sd == bglobal.bg_mhop;
@@ -1025,6 +1033,10 @@ strcpy(peer_addr, inet_ntoa(sin.sin_addr));
 
 		control_notify_config(BCM_NOTIFY_CONFIG_UPDATE, bfd);
 	}
+	
+        if (BFD_CHECK_FLAG(bfd->flags, BFD_SESS_FLAG_TRACK_SLA)) {
+                ptm_bfd_send_sla_update(bfd, &recv_tv);
+        }
 }
 
 

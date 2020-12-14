@@ -198,6 +198,7 @@ void ptm_bfd_echo_xmt_TO(bfd_session *bfd)
 	/* Send the scheduled echo  packet */
 	ptm_bfd_echo_snd(bfd);
 
+        gettimeofday(&bfd->xmit_tv, NULL);
 	/* Restart the timer for next time */
 	ptm_bfd_start_xmt_timer(bfd, true);
 }
@@ -207,6 +208,7 @@ void ptm_bfd_xmt_TO(bfd_session *bfd, int fbit)
 	/* Send the scheduled control packet */
 	ptm_bfd_snd(bfd, fbit);
 
+        gettimeofday(&bfd->xmit_tv, NULL);
 	/* Restart the timer for next time */
 	ptm_bfd_start_xmt_timer(bfd, false);
 }
@@ -642,6 +644,12 @@ static void _bfd_session_update(bfd_session *bs, struct bfd_peer_cfg *bpc)
 		ptm_bfd_echo_stop(bs, 0);
 	}
 
+        if (bpc->bpc_track_sla){
+		BFD_SET_FLAG(bs->flags, BFD_SESS_FLAG_TRACK_SLA);
+        } else {
+		BFD_UNSET_FLAG(bs->flags, BFD_SESS_FLAG_TRACK_SLA);
+        }
+
 	if (bpc->bpc_has_txinterval) {
 		bs->up_min_tx = bpc->bpc_txinterval * 1000;
 	}
@@ -836,9 +844,14 @@ skip_address_lookup:
 		BFD_SET_FLAG(bfd->flags, BFD_SESS_FLAG_IPV6);
 	}
 
+        if (bpc->bpc_has_discr) {
+            bfd->discrs.my_discr = bpc->bpc_discr;
+        } else {
+            bfd->discrs.my_discr = ptm_bfd_gen_ID();
+        }
+
 	/* Initialize the session */
 	bfd->ses_state = PTM_BFD_DOWN;
-	bfd->discrs.my_discr = ptm_bfd_gen_ID();
 	bfd->discrs.remote_discr = 0;
 	bfd->local_ip = bpc->bpc_local;
 	bfd->timers.desired_min_tx = bfd->up_min_tx;
@@ -960,4 +973,37 @@ int ptm_bfd_ses_del(struct bfd_peer_cfg *bpc)
 	bfd_session_free(bs);
 
 	return 0;
+}
+
+void ptm_bfd_send_sla_update(bfd_session *bfd, struct timeval *recv_tv)
+{
+    uint32_t time_elapsed = ((recv_tv->tv_sec*1000 + recv_tv->tv_usec/1000)
+            - (bfd->xmit_tv.tv_sec*1000 + bfd->xmit_tv.tv_usec/1000));
+    bfd->sla.lattency += time_elapsed;
+    if(bfd->sla.old_lat)
+        bfd->sla.jitter += abs(bfd->sla.old_lat - time_elapsed);
+    bfd->sla.old_lat = time_elapsed;
+    uint32_t total_pkts = bfd->stats.rx_ctrl_pkt + bfd->stats.rx_echo_pkt;
+    if(!(total_pkts % bfd->detect_mult)){
+        if(total_pkts % PKTS_TO_CONSIDER_FOR_PKT_LOSS < bfd->detect_mult){
+            uint32_t total_pkts_lost = ((bfd->stats.tx_ctrl_pkt + bfd->stats.tx_echo_pkt)
+                    - (bfd->stats.rx_ctrl_pkt + bfd->stats.rx_echo_pkt));
+            bfd->sla.pkt_loss = ((total_pkts_lost - bfd->sla.pkts_lost)/(float)PKTS_TO_CONSIDER_FOR_PKT_LOSS) * 100;
+            bfd->sla.pkts_lost = total_pkts_lost;
+        }
+
+        bfd->sla.lattency /= bfd->detect_mult;
+        bfd->sla.jitter /= (bfd->detect_mult - 1);
+
+#ifdef BFD_EVENT_DEBUG
+        log_debug("sla clac:\n\tlattency: %d\n\tjitter:%d\n\tpkt_loss:%f\n",
+                bfd->sla.lattency, bfd->sla.jitter, bfd->sla.pkt_loss);
+#endif /* BFD_EVENT_DEBUG */
+
+        control_notify_sla(bfd);
+
+        bfd->sla.lattency = 0;
+        bfd->sla.jitter = 0;
+        bfd->sla.old_lat = 0;
+    }
 }

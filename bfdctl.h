@@ -75,6 +75,9 @@ struct bfd_peer_cfg {
 	bool bpc_has_vrfname;
 	char bpc_vrfname[MAXNAMELEN + 1];
 
+        bool bpc_has_discr;
+        uint32_t bpc_discr;
+
 	bool bpc_has_detectmultiplier;
 	uint8_t bpc_detectmultiplier;
 
@@ -90,6 +93,8 @@ struct bfd_peer_cfg {
 	bool bpc_echo;
 	bool bpc_createonly;
 	bool bpc_shutdown;
+
+        bool bpc_track_sla;
 
 	/* Status information */
 	enum bfd_peer_status bpc_bps;
@@ -122,12 +127,16 @@ enum bc_msg_type {
 	BMT_NOTIFY = 4,
 	BMT_NOTIFY_ADD = 5,
 	BMT_NOTIFY_DEL = 6,
+        BMT_NOTIFY_SLA = 7,
+        BMT_NOTIFY_SLA_ADD = 8,
+        BMT_NOTIFY_SLA_DEL = 9,
 };
 
 /* Notify flags to use with bcm_notify. */
 #define BCM_NOTIFY_ALL ((uint64_t)-1)
 #define BCM_NOTIFY_PEER_STATE (1ULL << 0)
 #define BCM_NOTIFY_CONFIG (1ULL << 1)
+#define BCM_NOTIFY_PEER_SLA (1ULL << 2)
 #define BCM_NOTIFY_NONE 0
 
 /* Response 'status' definitions. */
@@ -136,6 +145,7 @@ enum bc_msg_type {
 
 /* Notify operation. */
 #define BCM_NOTIFY_PEER_STATUS "status"
+#define BCM_NOTIFY_PEER_SLA_UPDATE "sla"
 #define BCM_NOTIFY_CONFIG_ADD "add"
 #define BCM_NOTIFY_CONFIG_DELETE "delete"
 #define BCM_NOTIFY_CONFIG_UPDATE "update"

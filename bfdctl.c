@@ -74,6 +74,7 @@ void usage(void)
 		"\t-l <address>: local address (e.g. 192.168.0.1 or 2001:db8::100)\n"
 		"\t-m: multihop\n"
 		"\t-p <address>: peer address (e.g. 192.168.0.1 or 2001:db8::100)\n"
+                "\t-s: track sla and displays calculated sla parameters if monitoring\n"
 		"\t-v: verbose mode\n",
 		__progname);
 
@@ -90,7 +91,7 @@ int main(int argc, char *argv[])
 	int csock;
 	int opt;
 	uint16_t cur_id;
-	bool mhop = false, verbose = false, monitor = false;
+	bool mhop = false, verbose = false, monitor = false, sla = false;
 	struct sockaddr_any local, peer;
 	struct bfd_peer_cfg bpc;
 	uint64_t notify_flags = BCM_NOTIFY_ALL;
@@ -98,7 +99,7 @@ int main(int argc, char *argv[])
 	memset(&local, 0, sizeof(local));
 	memset(&peer, 0, sizeof(peer));
 
-	while ((opt = getopt(argc, argv, "aC:di:l:Mmp:v")) != -1) {
+	while ((opt = getopt(argc, argv, "aC:di:l:Mmsp:v")) != -1) {
 		switch (opt) {
 		case 'C':
 			ctl_path = optarg;
@@ -158,6 +159,10 @@ int main(int argc, char *argv[])
 			mhop = true;
 			break;
 
+                case 's':
+                        sla = true;
+                        break;
+
 		case 'v':
 			verbose = true;
 			break;
@@ -202,6 +207,7 @@ int main(int argc, char *argv[])
 
 	bpc.bpc_peer = peer;
 	bpc.bpc_local = local;
+        bpc.bpc_track_sla = sla;
 
 	/* Create the JSON string. */
 	jo = ctrl_new_json();
@@ -277,6 +283,7 @@ int bcm_recv(struct bfd_control_msg *bcm, void *arg)
 		}
 		break;
 
+        case BMT_NOTIFY_SLA:
 	case BMT_NOTIFY:
 		jo = json_tokener_parse((const char *)bcm->bcm_data);
 		if (jo == NULL) {
@@ -356,6 +363,15 @@ void ctrl_add_peer(struct json_object *msg, struct bfd_peer_cfg *bpc)
 		}
 		json_object_object_add(peer_jo, "local-address", jo);
 	}
+
+        if (bpc->bpc_track_sla) {
+            jo = json_object_new_boolean(bpc->bpc_track_sla);
+            if (jo == NULL) {
+                json_object_put(peer_jo);
+                return;
+            }
+            json_object_object_add(peer_jo, "track-sla", jo);
+        }
 
 	jo = json_object_new_string(satostr(&bpc->bpc_peer));
 	if (jo == NULL) {

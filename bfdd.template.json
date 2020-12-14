@@ -26,6 +26,10 @@
       "_vrf-name": "optional",
       "vrf-name": "netns1",
 
+      "_discriminator": "optional, default set by application",
+      "_discriminator_help": "my discriminator of the session, also session id",
+      "discriminator": 10,
+
       "_detect-multiplier": "optional, defaults to 3",
       "detect-multiplier": 3,
 
@@ -42,7 +46,11 @@
       "echo-mode": false,
 
       "_shutdown": "optional, defaults to false",
-      "shutdown": false
+      "shutdown": false,
+
+      "_track_sla": "optional, defaults to false",
+      "_track_sla_help": "if set calculated the sla parameters latency, jitter, packet loss",
+      "track_sla": false
     }
   ],
   "ipv6": [
